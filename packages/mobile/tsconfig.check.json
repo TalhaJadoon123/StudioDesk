@@ -1,0 +1,20 @@
+{
+  "extends": "../../tsconfig.json",
+  "//": "The mobile app talks to the HTTP API, not the monorepo packages - it must stay bundleable for iOS/Android.",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "moduleResolution": "bundler",
+    "module": "esnext",
+    "target": "es2022",
+    "lib": ["es2022", "dom"],
+    "types": ["node"],
+    "strict": true,
+    "allowJs": true,
+    "noEmit": true,
+    "paths": {
+      "@/*": ["./*"]
+    }
+  },
+  "include": ["app/**/*.ts", "app/**/*.tsx", "lib/**/*.ts"],
+  "exclude": ["node_modules", ".expo"]
+}

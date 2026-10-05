@@ -1,0 +1,56 @@
+{
+  "expo": {
+    "name": "StudioDesk",
+    "slug": "studiodesk",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "studiodesk",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "backgroundColor": "#6366f1",
+      "resizeMode": "contain"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "app.studiodesk.mobile",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "StudioDesk uses your location to confirm you are at the studio when you check in.",
+        "NSCameraUsageDescription": "StudioDesk uses the camera to scan your check-in QR code."
+      }
+    },
+    "android": {
+      "package": "app.studiodesk.mobile",
+      "adaptiveIcon": {
+        "backgroundColor": "#6366f1"
+      },
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
+      ]
+    },
+    "web": {
+      "bundler": "metro"
+    },
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow StudioDesk to scan your check-in QR code."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Allow StudioDesk to confirm you are at the studio when you check in."
+        }
+      ],
+      "expo-router",
+      "expo-secure-store"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

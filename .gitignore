@@ -1,0 +1,31 @@
+node_modules/
+dist/
+build/
+.next/
+out/
+coverage/
+.turbo/
+*.tsbuildinfo
+
+# env
+.env
+.env.local
+.env*.local
+!.env.example
+
+# mobile / expo
+.expo/
+.expo-shared/
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# os / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.log
+npm-debug.log*

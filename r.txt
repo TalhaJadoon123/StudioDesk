@@ -1,0 +1,26 @@
+﻿
+[1m[7m[36m RUN [39m[27m[22m [36mv2.1.9 [39m[90mE:/studio desk[39m
+
+ [32mΓ£ô[39m packages/core/test/bookings.test.ts [2m([22m[2m23 tests[22m[2m)[22m[33m 399[2mms[22m[39m
+ [32mΓ£ô[39m packages/billing/test/billing.test.ts [2m([22m[2m33 tests[22m[2m)[22m[33m 432[2mms[22m[39m
+ [32mΓ£ô[39m packages/core/test/members.test.ts [2m([22m[2m21 tests[22m[2m)[22m[33m 547[2mms[22m[39m
+ [32mΓ£ô[39m packages/checkin/test/checkin.test.ts [2m([22m[2m37 tests[22m[2m)[22m[33m 1036[2mms[22m[39m
+   [33m[2mΓ£ô[22m[39m QR tickets[2m > [22missues and verifies a ticket [33m662[2mms[22m[39m
+ [32mΓ£ô[39m packages/core/test/repository.test.ts [2m([22m[2m13 tests[22m[2m)[22m[90m 231[2mms[22m[39m
+ [32mΓ£ô[39m packages/billing/test/gateway.test.ts [2m([22m[2m19 tests[22m[2m)[22m[33m 636[2mms[22m[39m
+   [33m[2mΓ£ô[22m[39m verifyHmac[2m > [22maccepts a valid signature and rejects tampering [33m576[2mms[22m[39m
+ [32mΓ£ô[39m packages/booking/test/recurring.test.ts [2m([22m[2m17 tests[22m[2m)[22m[90m 50[2mms[22m[39m
+ [32mΓ£ô[39m packages/booking/test/calendar.test.ts [2m([22m[2m10 tests[22m[2m)[22m[90m 189[2mms[22m[39m
+ [32mΓ£ô[39m packages/shared/test/core-utils.test.ts [2m([22m[2m18 tests[22m[2m)[22m[90m 56[2mms[22m[39m
+ [32mΓ£ô[39m packages/shared/test/dates.test.ts [2m([22m[2m8 tests[22m[2m)[22m[90m 22[2mms[22m[39m
+ [32mΓ£ô[39m packages/shared/test/money.test.ts [2m([22m[2m5 tests[22m[2m)[22m[90m 20[2mms[22m[39m
+ [32mΓ£ô[39m packages/core/test/smoke.test.ts [2m([22m[2m2 tests[22m[2m)[22m[90m 12[2mms[22m[39m
+ [32mΓ£ô[39m packages/api/test/api.test.ts [2m([22m[2m31 tests[22m[2m)[22m[33m 6841[2mms[22m[39m
+   [33m[2mΓ£ô[22m[39m meta routes[2m > [22mreports health [33m1817[2mms[22m[39m
+   [33m[2mΓ£ô[22m[39m with the demo seed[2m > [22mserves a fully populated dashboard [33m1817[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m13 passed[39m[22m[90m (13)[39m
+[2m      Tests [22m [1m[32m237 passed[39m[22m[90m (237)[39m
+[2m   Start at [22m 06:01:30
+[2m   Duration [22m 60.83s[2m (transform 8.14s, setup 0ms, collect 66.23s, tests 10.47s, environment 11ms, prepare 22.81s)[22m
+

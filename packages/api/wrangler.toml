@@ -1,0 +1,22 @@
+name = "studiodesk-api"
+main = "src/worker.ts"
+compatibility_date = "2024-11-11"
+workers_dev = true
+
+# Free tier: 100,000 requests/day, 10ms CPU per invocation.
+[vars]
+ALLOWED_ORIGIN = "*"
+NODE_ENV = "production"
+
+# Secrets - set with `wrangler secret put <NAME>`:
+#   npx wrangler secret put SUPABASE_URL --config packages/api/wrangler.toml
+#   npx wrangler secret put SUPABASE_SERVICE_ROLE_KEY --config packages/api/wrangler.toml
+#   npx wrangler secret put GROQ_API_KEY --config packages/api/wrangler.toml
+#   npx wrangler secret put CHECKIN_SIGNING_SECRET --config packages/api/wrangler.toml
+
+[observability]
+enabled = true
+
+# Cron: renew memberships and run dunning once a day at 03:00 UTC.
+[triggers]
+crons = ["0 3 * * *"]

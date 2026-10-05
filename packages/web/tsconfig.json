@@ -1,0 +1,23 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "jsx": "preserve",
+    "moduleResolution": "Bundler",
+    "noEmit": true,
+    "incremental": true,
+    "allowJs": true,
+    "types": ["node"],
+    "paths": {
+      "@studiodesk/shared": ["../shared/src/index.ts"],
+      "@studiodesk/core": ["../core/src/index.ts"],
+      "@studiodesk/booking": ["../booking/src/index.ts"],
+      "@studiodesk/billing": ["../billing/src/index.ts"],
+      "@studiodesk/checkin": ["../checkin/src/index.ts"],
+      "@/*": ["./*"]
+    }
+  },
+  "include": ["**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
+  "exclude": ["node_modules", ".next"]
+}

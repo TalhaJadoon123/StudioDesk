@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.json",
+  "//": "Tests index into fixtures and result arrays directly; index-access strictness is noise there, and every array access in a test is an assertion anyway.",
+  "compilerOptions": {
+    "noUncheckedIndexedAccess": false,
+    "types": ["node"]
+  },
+  "include": ["packages/*/test/**/*.ts", "packages/*/src/**/*.ts"]
+}

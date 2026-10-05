@@ -1,0 +1,67 @@
+# StudioDesk - full local stack, zero cost.
+#
+#   docker compose up -d          start api + web
+#   docker compose exec api npm run seed:demo
+#
+# Both services run with no external credentials: the in-memory repository is
+# used, so the stack boots with nothing configured.
+
+services:
+  api:
+    build:
+      context: .
+      target: api
+    container_name: studiodesk-api
+    ports:
+      - '4000:4000'
+    environment:
+      NODE_ENV: production
+      PORT: '4000'
+      PUBLIC_WEB_URL: http://localhost:3000
+      # Add these to persist data and turn on payments/AI. All optional.
+      NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:-}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      POLAR_ACCESS_TOKEN: ${POLAR_ACCESS_TOKEN:-}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      CHECKIN_SIGNING_SECRET: ${CHECKIN_SIGNING_SECRET:-dev-secret-change-me}
+      SEED_ON_BOOT: ${SEED_ON_BOOT:-false}
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:4000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  web:
+    build:
+      context: .
+      target: web
+    container_name: studiodesk-web
+    ports:
+      - '3000:3000'
+    environment:
+      NODE_ENV: production
+      PORT: '3000'
+      API_URL: http://api:4000
+      PUBLIC_WEB_URL: http://localhost:3000
+      NEXTAUTH_URL: http://localhost:3000
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-dev-secret-change-me}
+      NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:-}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      POLAR_ACCESS_TOKEN: ${POLAR_ACCESS_TOKEN:-}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      CHECKIN_SIGNING_SECRET: ${CHECKIN_SIGNING_SECRET:-dev-secret-change-me}
+      NEXT_TELEMETRY_DISABLED: '1'
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped

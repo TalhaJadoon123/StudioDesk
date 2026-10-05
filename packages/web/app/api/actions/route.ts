@@ -1,0 +1,68 @@
+import { revalidatePath } from 'next/cache';
+import { NextResponse } from 'next/server';
+import { getDesk } from '@/lib/desk';
+
+/**
+ * Server actions for the app shell, implemented as a POST endpoint so the
+ * forms stay plain HTML (no client JS required, works with JS disabled).
+ *
+ * Every action is idempotent and revalidates the affected pages.
+ */
+export async function POST(request: Request) {
+  const desk = getDesk();
+  const form = await request.formData();
+  const intent = String(form.get('intent') ?? '');
+  const memberId = String(form.get('memberId') ?? '');
+  const redirect = String(form.get('redirect') ?? '/dashboard');
+
+  try {
+    switch (intent) {
+      case 'pause': {
+        await desk.members.pauseMember(desk.ctx, memberId, Number(form.get('days') ?? 30));
+        revalidatePath('/dashboard');
+        revalidatePath('/members');
+        revalidatePath(`/members/${memberId}`);
+        break;
+      }
+      case 'resume': {
+        await desk.members.resumeMember(desk.ctx, memberId);
+        revalidatePath('/dashboard');
+        revalidatePath('/members');
+        revalidatePath(`/members/${memberId}`);
+        break;
+      }
+      case 'cancel': {
+        await desk.members.cancelMember(desk.ctx, memberId, String(form.get('reason') ?? 'Cancelled by studio'));
+        revalidatePath('/dashboard');
+        revalidatePath('/members');
+        revalidatePath(`/members/${memberId}`);
+        break;
+      }
+      case 'run-dunning': {
+        const { runDunning, dunningSummary } = await import('@studiodesk/billing');
+        const gateways = (await import('@studiodesk/billing')).createGateways();
+        const result = await runDunning(desk.ctx, gateways.recurring);
+        revalidatePath('/billing');
+        return NextResponse.redirect(new URL(`/billing?ran=1&recovered=${result.recovered}`, request.url));
+      }
+      case 'create-member': {
+        const member = await desk.members.createMember(desk.ctx, {
+          name: String(form.get('name') ?? 'New member'),
+          email: (form.get('email') as string) || undefined,
+          phone: (form.get('phone') as string) || undefined,
+          planId: (form.get('planId') as string) || 'plan_unlimited',
+        });
+        revalidatePath('/members');
+        return NextResponse.redirect(new URL(`/members/${member.id}?created=1`, request.url));
+      }
+      default:
+        return NextResponse.json({ error: 'unknown_intent' }, { status: 400 });
+    }
+  } catch (error) {
+    // Surface the message rather than a blank page.
+    const message = error instanceof Error ? error.message : 'Action failed';
+    return NextResponse.redirect(new URL(`/?error=${encodeURIComponent(message)}`, request.url));
+  }
+
+  return NextResponse.redirect(new URL(redirect, request.url));
+}

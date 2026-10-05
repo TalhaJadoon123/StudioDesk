@@ -1,0 +1,28 @@
+﻿
+[1m[7m[36m RUN [39m[27m[22m [36mv2.1.9 [39m[90mE:/studio desk[39m
+
+ [32mΓ£ô[39m packages/core/test/bookings.test.ts [2m([22m[2m23 tests[22m[2m)[22m[90m 240[2mms[22m[39m
+ [32mΓ£ô[39m packages/billing/test/billing.test.ts [2m([22m[2m33 tests[22m[2m)[22m[33m 411[2mms[22m[39m
+ [32mΓ£ô[39m packages/checkin/test/checkin.test.ts [2m([22m[2m37 tests[22m[2m)[22m[33m 977[2mms[22m[39m
+   [33m[2mΓ£ô[22m[39m QR tickets[2m > [22missues and verifies a ticket [33m540[2mms[22m[39m
+ [32mΓ£ô[39m packages/core/test/members.test.ts [2m([22m[2m21 tests[22m[2m)[22m[33m 435[2mms[22m[39m
+ [32mΓ£ô[39m packages/billing/test/gateway.test.ts [2m([22m[2m19 tests[22m[2m)[22m[33m 418[2mms[22m[39m
+   [33m[2mΓ£ô[22m[39m verifyHmac[2m > [22maccepts a valid signature and rejects tampering [33m365[2mms[22m[39m
+ [32mΓ£ô[39m packages/core/test/repository.test.ts [2m([22m[2m13 tests[22m[2m)[22m[90m 141[2mms[22m[39m
+ [32mΓ£ô[39m packages/billing/test/integrations.test.ts [2m([22m[2m14 tests[22m[2m)[22m[90m 130[2mms[22m[39m
+ [32mΓ£ô[39m packages/booking/test/calendar.test.ts [2m([22m[2m10 tests[22m[2m)[22m[90m 153[2mms[22m[39m
+ [32mΓ£ô[39m packages/booking/test/recurring.test.ts [2m([22m[2m17 tests[22m[2m)[22m[90m 44[2mms[22m[39m
+ [32mΓ£ô[39m packages/shared/test/dates.test.ts [2m([22m[2m8 tests[22m[2m)[22m[90m 17[2mms[22m[39m
+ [32mΓ£ô[39m packages/shared/test/core-utils.test.ts [2m([22m[2m18 tests[22m[2m)[22m[90m 41[2mms[22m[39m
+ [32mΓ£ô[39m packages/shared/test/money.test.ts [2m([22m[2m5 tests[22m[2m)[22m[90m 14[2mms[22m[39m
+ [32mΓ£ô[39m packages/core/test/drivers.test.ts [2m([22m[2m3 tests[22m[2m)[22m[90m 14[2mms[22m[39m
+ [32mΓ£ô[39m packages/core/test/smoke.test.ts [2m([22m[2m2 tests[22m[2m)[22m[90m 11[2mms[22m[39m
+ [32mΓ£ô[39m packages/api/test/api.test.ts [2m([22m[2m31 tests[22m[2m)[22m[33m 9978[2mms[22m[39m
+   [33m[2mΓ£ô[22m[39m meta routes[2m > [22mreports health [33m7991[2mms[22m[39m
+   [33m[2mΓ£ô[22m[39m with the demo seed[2m > [22mserves a fully populated dashboard [33m857[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m15 passed[39m[22m[90m (15)[39m
+[2m      Tests [22m [1m[32m254 passed[39m[22m[90m (254)[39m
+[2m   Start at [22m 06:23:16
+[2m   Duration [22m 122.92s[2m (transform 27.67s, setup 0ms, collect 171.94s, tests 13.03s, environment 9ms, prepare 39.56s)[22m
+
