@@ -1,9 +1,14 @@
-import { newInvoiceId, newLineItemId, type Currency, type Invoice, type InvoiceLineItem } from '@studiodesk/shared';
+import { AppError, newInvoiceId, newLineItemId, type Currency, type Invoice, type InvoiceLineItem } from '@studiodesk/shared';
 import type { CoreContext } from '@studiodesk/core';
 import { invoiceNumber } from './stripe.js';
 
 export function invoicesRepo(ctx: CoreContext) {
   return ctx.repo.table('invoices');
+}
+
+/** Business-rule violations must map to 4xx, not 500. */
+function rule(code: 'conflict' | 'not_found' | 'validation_failed', message: string): Error {
+  return new AppError(code, message);
 }
 
 export interface DraftLineItem {
@@ -46,7 +51,7 @@ function buildLineItems(items: DraftLineItem[]): InvoiceLineItem[] {
  * exactly why their balance changed.
  */
 export async function createInvoice(ctx: CoreContext, input: CreateInvoiceInput): Promise<Invoice> {
-  if (!input.lineItems.length) throw new Error('Cannot create an invoice with no line items');
+  if (!input.lineItems.length) throw rule('validation_failed', 'Cannot create an invoice with no line items');
 
   const lineItems = buildLineItems(input.lineItems);
   const subtotalCents = lineItems.reduce((acc, item) => acc + item.amountCents, 0);
@@ -90,7 +95,7 @@ export async function addLineItem(
 ): Promise<Invoice> {
   const invoice = await requireInvoice(ctx, invoiceId);
   if (invoice.status === 'paid' || invoice.status === 'void') {
-    throw new Error(`Cannot add a line item to a ${invoice.status} invoice`);
+    throw rule('conflict', `Cannot add a line item to a ${invoice.status} invoice`);
   }
   const lineItems = [...invoice.lineItems, ...buildLineItems([item])];
   const subtotalCents = lineItems.reduce((acc, li) => acc + li.amountCents, 0);
@@ -128,7 +133,7 @@ export async function markPaid(
 
 export async function voidInvoice(ctx: CoreContext, invoiceId: string, reason?: string): Promise<Invoice> {
   const invoice = await requireInvoice(ctx, invoiceId);
-  if (invoice.status === 'paid') throw new Error('Cannot void a paid invoice - refund it instead');
+  if (invoice.status === 'paid') throw rule('conflict', 'Cannot void a paid invoice - refund it instead');
   const updated = await invoicesRepo(ctx).update(invoiceId, {
     status: 'void',
     amountDueCents: 0,
@@ -145,7 +150,7 @@ export async function getInvoice(ctx: CoreContext, id: string): Promise<Invoice 
 
 export async function requireInvoice(ctx: CoreContext, id: string): Promise<Invoice> {
   const invoice = await getInvoice(ctx, id);
-  if (!invoice) throw new Error(`Invoice ${id} not found`);
+  if (!invoice) throw rule('not_found', `Invoice ${id} not found`);
   return invoice;
 }
 

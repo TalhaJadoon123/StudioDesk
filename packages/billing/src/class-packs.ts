@@ -1,4 +1,4 @@
-import { addDays, newPackId, sortBy, toCents, type ClassPack } from '@studiodesk/shared';
+import { AppError, addDays, newPackId, sortBy, toCents, type ClassPack } from '@studiodesk/shared';
 import type { CoreContext } from '@studiodesk/core';
 import { creditBalance } from '@studiodesk/core';
 import { createInvoice, markPaid, type DraftLineItem } from './invoices.js';
@@ -7,6 +7,14 @@ import type { PaymentGateway } from './gateway.js';
 
 export function packsRepo(ctx: CoreContext) {
   return ctx.repo.table('packs');
+}
+
+/** Business-rule violations must map to 4xx, not 500. See `errors.ts`. */
+function rule(
+  code: 'conflict' | 'not_found' | 'validation_failed' | 'payment_failed',
+  message: string,
+): Error {
+  return new AppError(code, message);
 }
 
 /** Price list a studio can sell. Studios can override the amounts freely. */
@@ -58,8 +66,8 @@ export async function purchasePack(
   input: PurchasePackInput,
 ): Promise<PurchasePackResult> {
   const member = await ctx.repo.table('members').findById(input.memberId);
-  if (!member) throw new Error(`Member ${input.memberId} not found`);
-  if (member.status === 'cancelled') throw new Error(`${member.name}'s membership is cancelled`);
+  if (!member) throw rule('not_found', `Member ${input.memberId} not found`);
+  if (member.status === 'cancelled') throw rule('conflict', `${member.name}'s membership is cancelled`);
 
   const spec =
     input.name && input.credits
@@ -72,7 +80,7 @@ export async function purchasePack(
 
   const name = input.name ?? spec?.name ?? `${input.credits ?? 0} Class Pack`;
   const credits = input.credits ?? spec?.credits ?? 0;
-  if (credits <= 0) throw new Error('A class pack must contain at least one credit');
+  if (credits <= 0) throw rule('validation_failed', 'A class pack must contain at least one credit');
   const priceCents = input.priceCents ?? spec?.priceCents ?? 0;
   const currency = input.currency ?? member.currency ?? 'usd';
 
@@ -182,7 +190,7 @@ export async function topUpPack(
   credits: number,
 ): Promise<ClassPack> {
   const pack = await packsRepo(ctx).findById(packId);
-  if (!pack) throw new Error(`Pack ${packId} not found`);
+  if (!pack) throw rule('not_found', `Pack ${packId} not found`);
   return packsRepo(ctx).update(packId, {
     credits: pack.credits + credits,
     creditsRemaining: pack.creditsRemaining + credits,
@@ -194,7 +202,7 @@ export async function topUpPack(
 
 export async function refundPack(ctx: CoreContext, packId: string, credits: number): Promise<ClassPack> {
   const pack = await packsRepo(ctx).findById(packId);
-  if (!pack) throw new Error(`Pack ${packId} not found`);
+  if (!pack) throw rule('not_found', `Pack ${packId} not found`);
   const creditsRemaining = Math.max(0, pack.creditsRemaining - credits);
   return packsRepo(ctx).update(packId, {
     creditsRemaining,

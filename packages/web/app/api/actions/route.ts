@@ -38,6 +38,18 @@ export async function POST(request: Request) {
         revalidatePath(`/members/${memberId}`);
         break;
       }
+      case 'kiosk-class': {
+        // Kiosk taps carry an explicit class so the wrong person cannot be
+        // checked into the wrong session.
+        const { kioskCheckin } = await import('@studiodesk/checkin');
+        await kioskCheckin(desk.ctx, {
+          deviceId: String(form.get('deviceId') ?? ''),
+          memberId,
+          classId: (form.get('classId') as string) || undefined,
+        });
+        revalidatePath(`/kiosk/${String(form.get('deviceId') ?? '')}`);
+        break;
+      }
       case 'run-dunning': {
         const { runDunning, dunningSummary } = await import('@studiodesk/billing');
         const gateways = (await import('@studiodesk/billing')).createGateways();
@@ -59,9 +71,14 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'unknown_intent' }, { status: 400 });
     }
   } catch (error) {
-    // Surface the message rather than a blank page.
+    // Expected failures (double booking, full class) get a readable message;
+    // anything else is a bug, so only the status code is reported.
+    const status = (error as { statusCode?: number })?.statusCode ?? 500;
     const message = error instanceof Error ? error.message : 'Action failed';
-    return NextResponse.redirect(new URL(`/?error=${encodeURIComponent(message)}`, request.url));
+    const safe = status < 500 ? message : 'Something went wrong on our side.';
+    return NextResponse.redirect(new URL(`/?error=${encodeURIComponent(safe)}`, request.url), {
+      status: status < 500 ? 303 : 303,
+    });
   }
 
   return NextResponse.redirect(new URL(redirect, request.url));

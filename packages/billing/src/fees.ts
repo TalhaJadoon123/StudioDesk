@@ -1,4 +1,4 @@
-import { newFeeId, sortBy, type Fee, type FeeKind, type FeeWaiverReason } from '@studiodesk/shared';
+import { AppError, newFeeId, sortBy, type Fee, type FeeKind, type FeeWaiverReason } from '@studiodesk/shared';
 import type { CoreContext } from '@studiodesk/core';
 import { createInvoice, markPaid } from './invoices.js';
 import { chargeKey } from './stripe.js';
@@ -6,6 +6,11 @@ import type { PaymentGateway, SubscriberHandle } from './gateway.js';
 
 export function feesRepo(ctx: CoreContext) {
   return ctx.repo.table('fees');
+}
+
+/** Business-rule violations must map to 4xx, not 500. */
+function rule(code: 'conflict' | 'not_found' | 'validation_failed', message: string): Error {
+  return new AppError(code, message);
 }
 
 export const DEFAULT_LATE_CANCEL_FEE_CENTS = 300;
@@ -52,7 +57,7 @@ export async function assessFee(
   }
 
   const member = await ctx.repo.table('members').findById(input.memberId);
-  if (!member) throw new Error(`Member ${input.memberId} not found`);
+  if (!member) throw rule('not_found', `Member ${input.memberId} not found`);
 
   const amountCents = input.amountCents ?? defaultAmountFor(input.kind);
   const at = ctx.now().toISOString();
@@ -146,7 +151,7 @@ export async function waiveFee(
   note?: string,
 ): Promise<Fee> {
   const fee = await feesRepo(ctx).findById(feeId);
-  if (!fee) throw new Error(`Fee ${feeId} not found`);
+  if (!fee) throw rule('not_found', `Fee ${feeId} not found`);
   const updated = await feesRepo(ctx).update(feeId, {
     status: 'waived',
     waivedAt: ctx.now().toISOString(),
@@ -159,7 +164,7 @@ export async function waiveFee(
 
 export async function voidFee(ctx: CoreContext, feeId: string, note?: string): Promise<Fee> {
   const fee = await feesRepo(ctx).findById(feeId);
-  if (!fee) throw new Error(`Fee ${feeId} not found`);
+  if (!fee) throw rule('not_found', `Fee ${feeId} not found`);
   return feesRepo(ctx).update(feeId, { status: 'void', note: note ?? fee.note });
 }
 

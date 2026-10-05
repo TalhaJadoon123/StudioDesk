@@ -1,4 +1,12 @@
-/** Stable, typed application errors. Every package throws these. */
+/**
+ * Stable, typed application errors. Every package throws these.
+ *
+ * Security note: `message` is safe to return to a client, but `details` is
+ * not always safe. `toErrorBody()` below is the single place that decides what
+ * leaves the server - it strips details for 5xx responses so internal failures
+ * (stack traces, SQL, upstream payloads) never reach a browser. Handlers that
+ * deliberately expose details (validation) always use 4xx codes.
+ */
 
 export type ErrorCode =
   | 'not_found'
@@ -76,12 +84,30 @@ export function isAppError(err: unknown): err is AppError {
   return err instanceof AppError;
 }
 
-/** Normalise anything thrown into a JSON-serialisable error body. */
+/** Messages returned for unexpected server-side failures. */
+export const GENERIC_500_MESSAGE = 'Something went wrong on our side.';
+
+/**
+ * Normalise anything thrown into a JSON-serialisable error body.
+ *
+ * 4xx: the message and details are the user's problem, so they are returned
+ * verbatim. 5xx: an unexpected bug, so only a generic message leaves the server
+ * and the real error is logged by the caller.
+ */
 export function toErrorBody(err: unknown): { statusCode: number; body: Record<string, unknown> } {
-  if (isAppError(err)) return { statusCode: err.statusCode, body: err.toJSON() };
+  if (isAppError(err)) {
+    if (err.statusCode >= 500) {
+      return {
+        statusCode: err.statusCode,
+        body: { error: err.code, message: GENERIC_500_MESSAGE },
+      };
+    }
+    return { statusCode: err.statusCode, body: err.toJSON() };
+  }
+
   const message = err instanceof Error ? err.message : String(err);
   return {
     statusCode: 500,
-    body: { error: 'internal_error', message, details: undefined },
+    body: { error: 'internal_error', message: GENERIC_500_MESSAGE },
   };
 }

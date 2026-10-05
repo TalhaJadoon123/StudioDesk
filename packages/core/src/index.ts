@@ -13,6 +13,7 @@ import { connectNotifications } from './notifications.js';
 
 export * from './repository.js';
 export type { TableName, Row, Table } from './repository.js';
+import type { TableName } from './repository.js';
 export * from './context.js';
 export * from './validation.js';
 export * from './groq.js';

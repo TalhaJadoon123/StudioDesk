@@ -1,4 +1,5 @@
 import {
+  AppError,
   addDays,
   daysBetween,
   newEventId,
@@ -23,6 +24,11 @@ export function dunningEventsRepo(ctx: CoreContext) {
 
 export function chargesRepo(ctx: CoreContext) {
   return ctx.repo.table('charges');
+}
+
+/** Business-rule violations must map to 4xx, not 500. */
+function rule(code: 'conflict' | 'not_found', message: string): Error {
+  return new AppError(code, message);
 }
 
 export const DEFAULT_DUNNING_POLICY: DunningPolicy = {
@@ -122,7 +128,7 @@ export async function registerFailedPayment(
   input: { membershipId: string; amountCents: number; failureCode?: string; gateway?: string },
 ): Promise<{ membership: Membership; schedule: DunningStep[]; event: DunningEvent }> {
   const membership = await membershipsRepo(ctx).findById(input.membershipId);
-  if (!membership) throw new Error(`Membership ${input.membershipId} not found`);
+  if (!membership) throw rule('not_found', `Membership ${input.membershipId} not found`);
 
   const policy = await getDunningPolicy(ctx);
   const at = ctx.now().toISOString();
@@ -184,7 +190,7 @@ export async function registerSuccessfulPayment(
   gateway = 'manual',
 ): Promise<Membership> {
   const membership = await membershipsRepo(ctx).findById(membershipId);
-  if (!membership) throw new Error(`Membership ${membershipId} not found`);
+  if (!membership) throw rule('not_found', `Membership ${membershipId} not found`);
   const at = ctx.now().toISOString();
 
   await chargesRepo(ctx).insert({
@@ -555,7 +561,7 @@ export async function recoverNow(
   gateway: PaymentGateway,
 ): Promise<{ recovered: boolean; amountCents: number; failureCode?: string }> {
   const membership = await membershipsRepo(ctx).findById(membershipId);
-  if (!membership) throw new Error(`Membership ${membershipId} not found`);
+  if (!membership) throw rule('not_found', `Membership ${membershipId} not found`);
   const plan = await ctx.repo.table('plans').findById(membership.planId);
   const amount = plan?.priceCents ?? 0;
   const member = await ctx.repo.table('members').findById(membership.memberId);

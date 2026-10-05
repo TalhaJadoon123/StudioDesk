@@ -1,4 +1,4 @@
-import { newDropInId, sortBy, type DropIn } from '@studiodesk/shared';
+import { AppError, newDropInId, sortBy, type DropIn } from '@studiodesk/shared';
 import type { CoreContext } from '@studiodesk/core';
 import { createBooking } from '@studiodesk/core';
 import { createInvoice, markPaid } from './invoices.js';
@@ -7,6 +7,11 @@ import type { PaymentGateway } from './gateway.js';
 
 export function dropInsRepo(ctx: CoreContext) {
   return ctx.repo.table('dropIns');
+}
+
+/** Business-rule violations must map to 4xx, not 500. */
+function rule(code: 'conflict' | 'not_found' | 'validation_failed', message: string): Error {
+  return new AppError(code, message);
 }
 
 export const DEFAULT_DROP_IN_PRICE_CENTS = 2_200;
@@ -48,9 +53,9 @@ export async function purchaseDropIn(
     ctx.repo.table('members').findById(input.memberId),
     ctx.repo.table('classes').findById(input.classId),
   ]);
-  if (!member) throw new Error(`Member ${input.memberId} not found`);
-  if (!klass) throw new Error(`Class ${input.classId} not found`);
-  if (klass.status === 'cancelled') throw new Error(`${klass.name} has been cancelled`);
+  if (!member) throw rule('not_found', `Member ${input.memberId} not found`);
+  if (!klass) throw rule('not_found', `Class ${input.classId} not found`);
+  if (klass.status === 'cancelled') throw rule('conflict', `${klass.name} has been cancelled`);
 
   const priceCents = input.priceCents ?? DEFAULT_DROP_IN_PRICE_CENTS;
   const currency = member.currency ?? 'usd';
@@ -166,7 +171,7 @@ export async function refundDropIn(
   gateway?: PaymentGateway,
 ): Promise<{ dropIn: DropIn; refunded: boolean; refundId?: string }> {
   const dropIn = await dropInsRepo(ctx).findById(dropInId);
-  if (!dropIn) throw new Error(`Drop-in ${dropInId} not found`);
+  if (!dropIn) throw rule('not_found', `Drop-in ${dropInId} not found`);
   if (dropIn.status === 'refunded') return { dropIn, refunded: false };
 
   let refundId: string | undefined;

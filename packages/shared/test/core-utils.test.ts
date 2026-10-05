@@ -4,6 +4,7 @@ import {
   EventBus,
   PLAN_CATALOG,
   formatMoney,
+  GENERIC_500_MESSAGE,
   isAppError,
   limitsForTier,
   newBookingId,
@@ -39,10 +40,24 @@ describe('errors', () => {
     expect(isAppError(new Error('nope'))).toBe(false);
   });
 
-  it('normalises unknown throwables', () => {
-    const { statusCode, body } = toErrorBody(new Error('boom'));
-    expect(statusCode).toBe(500);
-    expect(body.message).toBe('boom');
+  it('never leaks internals from a 5xx', () => {
+    // A client mistake is the caller's problem, so it is reported verbatim.
+    const validation = toErrorBody(new AppError('validation_failed', 'name is required', { field: 'name' }));
+    expect(validation.statusCode).toBe(422);
+    expect(validation.body.message).toBe('name is required');
+
+    // An unexpected bug is ours: the real message must not reach the browser.
+    const crash = toErrorBody(new Error('connect ECONNREFUSED 10.0.0.5:5432'));
+    expect(crash.statusCode).toBe(500);
+    expect(crash.body.message).toBe(GENERIC_500_MESSAGE);
+    expect(JSON.stringify(crash.body)).not.toContain('10.0.0.5');
+    expect(crash.body).not.toHaveProperty('stack');
+
+    // Same for a 5xx AppError.
+    const gateway = toErrorBody(new AppError('gateway_error', 'stripe key sk_live_... rejected'));
+    expect(gateway.statusCode).toBe(502);
+    expect(gateway.body.message).toBe(GENERIC_500_MESSAGE);
+    expect(JSON.stringify(gateway.body)).not.toContain('sk_live_');
   });
 });
 

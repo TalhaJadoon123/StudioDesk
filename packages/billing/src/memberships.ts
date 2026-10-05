@@ -1,4 +1,4 @@
-import { addDays, addMonths, sortBy, type Membership, type Plan } from '@studiodesk/shared';
+import { AppError, addDays, addMonths, sortBy, type Membership, type Plan } from '@studiodesk/shared';
 import type { CoreContext } from '@studiodesk/core';
 import { createInvoice, markPaid } from './invoices.js';
 import { registerFailedPayment, registerSuccessfulPayment, membershipsRepo } from './dunning.js';
@@ -6,6 +6,16 @@ import { chargeKey } from './stripe.js';
 import { createManualGateway, type PaymentGateway } from './gateway.js';
 
 export { membershipsRepo };
+
+/**
+ * Business-rule violations must be `AppError`s, not plain `Error`s: the API
+ * maps `conflict` to 409 and `not_found` to 404, and anything unrecognised
+ * becomes a 500. A duplicate subscription is the caller's problem, not a
+ * server fault, so it must not look like a crash.
+ */
+function rule(code: 'conflict' | 'not_found' | 'payment_failed', message: string): Error {
+  return new AppError(code, message);
+}
 
 export interface SubscribeInput {
   memberId: string;
@@ -31,9 +41,9 @@ export async function subscribe(ctx: CoreContext, input: SubscribeInput): Promis
     ctx.repo.table('members').findById(input.memberId),
     ctx.repo.table('plans').findById(input.planId),
   ]);
-  if (!member) throw new Error(`Member ${input.memberId} not found`);
-  if (!plan) throw new Error(`Plan ${input.planId} not found`);
-  if (!plan.active) throw new Error(`Plan ${plan.name} is not active`);
+  if (!member) throw rule('not_found', `Member ${input.memberId} not found`);
+  if (!plan) throw rule('not_found', `Plan ${input.planId} not found`);
+  if (!plan.active) throw rule('conflict', `Plan ${plan.name} is not active`);
 
   const gateway = input.gateway ?? (input.offline ? createManualGateway() : undefined);
   const at = ctx.now();
@@ -48,7 +58,7 @@ export async function subscribe(ctx: CoreContext, input: SubscribeInput): Promis
   
                                              },
                                              } as never);
-  if (existing) throw new Error(`${member.name} already has an active membership`);
+  if (existing) throw rule('conflict', `${member.name} already has an active membership`);
 
   let customerId: string | undefined;
   let gatewaySubscriptionId: string | undefined;
@@ -210,8 +220,8 @@ export async function changePlan(
     membershipsRepo(ctx).findById(input.membershipId),
     ctx.repo.table('plans').findById(input.newPlanId),
   ]);
-  if (!membership) throw new Error(`Membership ${input.membershipId} not found`);
-  if (!newPlan) throw new Error(`Plan ${input.newPlanId} not found`);
+  if (!membership) throw rule('not_found', `Membership ${input.membershipId} not found`);
+  if (!newPlan) throw rule('not_found', `Plan ${input.newPlanId} not found`);
 
   const currentPlan = await ctx.repo.table('plans').findById(membership.planId);
   const at = ctx.now();
@@ -306,7 +316,7 @@ export async function cancelMembership(
   options: { immediate?: boolean; gateway?: PaymentGateway; reason?: string } = {},
 ): Promise<Membership> {
   const membership = await membershipsRepo(ctx).findById(membershipId);
-  if (!membership) throw new Error(`Membership ${membershipId} not found`);
+  if (!membership) throw rule('not_found', `Membership ${membershipId} not found`);
 
   const at = ctx.now().toISOString();
   const cancelAtPeriodEnd = !options.immediate;
@@ -345,7 +355,7 @@ export async function pauseMembership(
   days = 30,
 ): Promise<Membership> {
   const membership = await membershipsRepo(ctx).findById(membershipId);
-  if (!membership) throw new Error(`Membership ${membershipId} not found`);
+  if (!membership) throw rule('not_found', `Membership ${membershipId} not found`);
   const at = ctx.now();
   const updated = await membershipsRepo(ctx).update(membershipId, {
     status: 'paused',
@@ -363,7 +373,7 @@ export async function pauseMembership(
 
 export async function resumeMembership(ctx: CoreContext, membershipId: string): Promise<Membership> {
   const membership = await membershipsRepo(ctx).findById(membershipId);
-  if (!membership) throw new Error(`Membership ${membershipId} not found`);
+  if (!membership) throw rule('not_found', `Membership ${membershipId} not found`);
   const updated = await membershipsRepo(ctx).update(membershipId, {
     status: 'active',
     pausedUntil: undefined,

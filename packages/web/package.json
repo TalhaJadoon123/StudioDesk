@@ -12,14 +12,23 @@
     "deploy:pages": "next build && wrangler pages deploy .next --project-name studiodesk"
   },
   "dependencies": {
-    "@pdfme/generator": "^4.5.1",
-    "@pdfme/schemas": "^4.5.1",
     "next": "^14.2.18",
-    "next-auth": "^4.24.10",
     "qrcode": "^1.5.4",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "resend": "^4.0.1"
+    "react-dom": "^18.3.1"
+  },
+  "//": "Email goes through fetch against Resend/useSend (no SDK) - see packages/billing/src/email.ts. Auth.js is optional: add next-auth when you want login, see DEPLOY.md section 3.",
+  "optionalDependencies": {
+    "@pdfme/generator": "^4.5.1",
+    "@pdfme/schemas": "^4.5.1"
+  },
+  "peerDependencies": {
+    "next-auth": "^4.24.10"
+  },
+  "peerDependenciesMeta": {
+    "next-auth": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@types/qrcode": "^1.5.5",
