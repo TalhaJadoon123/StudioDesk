@@ -50,7 +50,8 @@ coverage/
 RELEASE-VERDICT.md
 cov.txt
 err-audit.txt
-final-gate*.txt`nfinal-test*.txt
+final-gate*.txt
+final-test*.txt
 gate.txt
 test-run*.txt
 ts-*.txt
