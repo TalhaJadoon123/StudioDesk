@@ -23,7 +23,13 @@ export interface Env {
   SUPABASE_SERVICE_ROLE_KEY?: string;
   GROQ_API_KEY?: string;
   CHECKIN_SIGNING_SECRET?: string;
+  /** Explicit allowlist. `*` disables credentialed cross-origin access. */
   ALLOWED_ORIGIN?: string;
+  /** When set, every non-health route requires this bearer token. */
+  API_KEY?: string;
+  POLAR_ACCESS_TOKEN?: string;
+  STRIPE_SECRET_KEY?: string;
+  RESEND_API_KEY?: string;
 }
 
 /** One promise per isolate - Workers reuses the isolate across requests. */
@@ -90,14 +96,20 @@ function match(method: string, pathname: string): { handler: Handler; params: Re
 /* Routes                                                                     */
 /* -------------------------------------------------------------------------- */
 
-on('GET', '/health', async () =>
-  json({
-    status: 'ok',
-    service: 'studiodesk-worker',
-    runtime: 'cloudflare-workers',
-    integrations: { supabase: config.hasHostedBackend(), groq: config.hasAi() },
-  }),
-);
+/** Readiness probe for the Workers deploy gate. */
+on('GET', '/ready', async () => {
+  const desk = await getDesk({} as Env);
+  try {
+    await desk.ctx.repo.table('studios').count();
+    return json({ ready: true, driver: desk.ctx.repo.kind });
+  } catch (error) {
+    return json({
+      ready: false,
+      driver: desk.ctx.repo.kind,
+      reason: error instanceof Error ? error.message : 'unknown',
+    });
+  }
+});
 
 on('GET', '/api/dashboard', async (_request, _params, _url) => {
   const desk = await getDesk({} as Env);
@@ -241,33 +253,93 @@ on('GET', '/api/reports/churn', async (_request, _params, url) => {
 /* Worker entrypoint                                                          */
 /* -------------------------------------------------------------------------- */
 
+/** Health probes must stay unauthenticated, or Workers deploys never go live. */
+const PUBLIC_PATHS = new Set(['/health', '/ready', '/']);
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
-    const origin = env.ALLOWED_ORIGIN ?? '*';
+    const configured = env.ALLOWED_ORIGIN ?? '*';
+    // Never pair a wildcard origin with credentials.
+    const allowOrigin = configured === '*' ? '*' : configured;
+
+    const corsHeaders: Record<string, string> = {
+      'Access-Control-Allow-Methods': 'GET,POST,PATCH,PUT,DELETE,OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type,Authorization,X-Api-Key,X-Studio-Id',
+      'Access-Control-Max-Age': '86400',
+      'X-Content-Type-Options': 'nosniff',
+      'X-Frame-Options': 'DENY',
+      'Referrer-Policy': 'strict-origin-when-cross-origin',
+      'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
+    };
+    if (allowOrigin !== '*') corsHeaders['Access-Control-Allow-Credentials'] = 'true';
 
     if (request.method === 'OPTIONS') {
-      return new Response(null, {
-        status: 204,
-        headers: {
-          'Access-Control-Allow-Origin': origin,
-          'Access-Control-Allow-Methods': 'GET,POST,PATCH,DELETE,OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type,Authorization',
-          'Access-Control-Max-Age': '86400',
-        },
-      });
+      return new Response(null, { status: 204, headers: { ...corsHeaders, 'Access-Control-Allow-Origin': allowOrigin } });
     }
 
-    const matched = match(request.method, url.pathname);
-    if (!matched) return json({ error: 'not_found', message: `No route for ${url.pathname}` }, 404);
+    const withHeaders = (response: Response): Response => {
+      response.headers.set('Access-Control-Allow-Origin', allowOrigin);
+      if (allowOrigin !== '*') response.headers.set('Vary', 'Origin');
+      for (const [key, value] of Object.entries(corsHeaders)) {
+        if (key === 'Access-Control-Allow-Origin') continue;
+        response.headers.set(key, value);
+      }
+      return response;
+    };
+
+    const path = url.pathname;
+
+    // Handled here rather than in the router because it reports on `env`.
+    if (path === '/health') {
+      return withHeaders(
+        json({
+          status: 'ok',
+          service: 'studiodesk-worker',
+          runtime: 'cloudflare-workers',
+          live: true,
+          security: {
+            authRequired: Boolean(env.API_KEY),
+            corsWildcard: allowOrigin === '*',
+            rateLimit: 'per-isolate (no shared counter)',
+          },
+          integrations: { supabase: config.hasHostedBackend(), groq: config.hasAi() },
+        }),
+      );
+    }
+
+    // Bearer-token gate when a key is configured.
+    if (env.API_KEY && !PUBLIC_PATHS.has(path)) {
+      const header = request.headers.get('authorization') ?? '';
+      const supplied = header.startsWith('Bearer ') ? header.slice(7).trim() : '';
+      const viaHeader = request.headers.get('x-api-key') ?? '';
+      const expected = env.API_KEY!;
+      const ok = (candidate: string): boolean => {
+        if (candidate.length !== expected.length) return false;
+        let diff = 0;
+        for (let i = 0; i < candidate.length; i += 1) {
+          diff |= candidate.charCodeAt(i) ^ expected.charCodeAt(i);
+        }
+        return diff === 0;
+      };
+      if (!ok(supplied) && !ok(viaHeader)) {
+        return withHeaders(
+          json({ error: 'unauthorized', message: 'Missing or invalid API key.' }, 401),
+        );
+      }
+    }
+
+    const matched = match(request.method, path);
+    if (!matched) {
+      return withHeaders(json({ error: 'not_found', message: `No route for ${path}` }, 404));
+    }
 
     try {
       const response = await matched.handler(request, matched.params, url);
-      response.headers.set('Access-Control-Allow-Origin', origin);
-      return response;
+      return withHeaders(response);
     } catch (error) {
       const { statusCode, body: payload } = toErrorBody(error);
-      return json(payload, statusCode);
+      return withHeaders(json(payload, statusCode));
     }
   },
 };

@@ -6,18 +6,40 @@
 # Both services run with no external credentials: the in-memory repository is
 # used, so the stack boots with nothing configured.
 
+# StudioDesk - full local stack, zero cost.
+#
+#   docker compose up -d
+#   docker compose exec api npm run seed:demo
+#
+# Security posture for a real deployment:
+#   - NODE_ENV=production makes the API REFUSE to start without API_KEY and
+#     without an explicit CORS allowlist. Both are checked at boot.
+#   - Every secret is injected; none is baked into the image.
+#   - `docker-compose.prod.yml` overrides the dev-friendly defaults.
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: '10m'
+    max-file: '3'
+
 services:
   api:
     build:
       context: .
       target: api
-    container_name: studiodesk-api
+      # Pinned by digest in CI; the tag is a convenience for local runs.
+    image: studiodesk-api:${STUDIODESK_VERSION:-dev}
     ports:
       - '4000:4000'
     environment:
-      NODE_ENV: production
+      NODE_ENV: ${NODE_ENV:-production}
       PORT: '4000'
-      PUBLIC_WEB_URL: http://localhost:3000
+      HOST: 0.0.0.0
+      PUBLIC_WEB_URL: ${PUBLIC_WEB_URL:-http://localhost:3000}
+      # Required in production - the API refuses to boot without it.
+      API_KEY: ${API_KEY:-}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000}
       # Add these to persist data and turn on payments/AI. All optional.
       NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:-}
       SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-}
@@ -25,43 +47,82 @@ services:
       POLAR_ACCESS_TOKEN: ${POLAR_ACCESS_TOKEN:-}
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
       RESEND_API_KEY: ${RESEND_API_KEY:-}
-      CHECKIN_SIGNING_SECRET: ${CHECKIN_SIGNING_SECRET:-dev-secret-change-me}
+      CHECKIN_SIGNING_SECRET: ${CHECKIN_SIGNING_SECRET:-}
       SEED_ON_BOOT: ${SEED_ON_BOOT:-false}
     restart: unless-stopped
+    stop_grace_period: 15s
+    logging: *default-logging
+    security_opt:
+      - no-new-privileges:true
+    read_only: false
+    cap_drop:
+      - ALL
+    cap_add:
+      # Required for Node to bind a port.
+      - NET_BIND_SERVICE
     healthcheck:
       test:
         - CMD
         - node
         - -e
-        - "fetch('http://127.0.0.1:4000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+        - "fetch('http://127.0.0.1:4000/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 20s
+      start_period: 25s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '1.0'
 
   web:
     build:
       context: .
       target: web
-    container_name: studiodesk-web
+    image: studiodesk-web:${STUDIODESK_VERSION:-dev}
     ports:
       - '3000:3000'
     environment:
-      NODE_ENV: production
+      NODE_ENV: ${NODE_ENV:-production}
       PORT: '3000'
-      API_URL: http://api:4000
-      PUBLIC_WEB_URL: http://localhost:3000
-      NEXTAUTH_URL: http://localhost:3000
-      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-dev-secret-change-me}
+      API_URL: ${API_URL:-http://api:4000}
+      PUBLIC_WEB_URL: ${PUBLIC_WEB_URL:-http://localhost:3000}
+      API_KEY: ${API_KEY:-}
+      NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3000}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-}
       NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:-}
       NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY:-}
       GROQ_API_KEY: ${GROQ_API_KEY:-}
       POLAR_ACCESS_TOKEN: ${POLAR_ACCESS_TOKEN:-}
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
       RESEND_API_KEY: ${RESEND_API_KEY:-}
-      CHECKIN_SIGNING_SECRET: ${CHECKIN_SIGNING_SECRET:-dev-secret-change-me}
+      CHECKIN_SIGNING_SECRET: ${CHECKIN_SIGNING_SECRET:-}
       NEXT_TELEMETRY_DISABLED: '1'
     depends_on:
       api:
         condition: service_healthy
     restart: unless-stopped
+    stop_grace_period: 15s
+    logging: *default-logging
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          memory: 768M
+          cpus: '1.0'

@@ -13,8 +13,8 @@ const fs = require('node:fs');
 const os = require('node:os');
 const { execFileSync } = require('node:child_process');
 
-const CACACHE = path.join(os.homedir(), 'AppData', 'Local', 'hermes', 'node', 'node_modules', 'npm', 'node_modules', 'cacache');
-const cacache = require(CACACHE);
+const CACACHE = path.join(os.homedir(), 'AppData', 'Local', 'npm-cache', '_cacache');
+const cacache = require('cacache');
 
 const ROOT = path.resolve(__dirname, '..');
 const CACHE_PATH = path.join(os.homedir(), 'AppData', 'Local', 'npm-cache', '_cacache');

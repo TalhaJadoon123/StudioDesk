@@ -61,12 +61,43 @@ import { checkin, issueTicket, kioskCheckin, kioskLanding, verifyTicket } from '
  * of every rule.
  */
 
+/**
+ * Resolves the CORS allowlist.
+ *
+ * Precedence: explicit option > `CORS_ORIGIN` > `ALLOWED_ORIGIN` > the web URL.
+ * A comma-separated list is accepted. `*` is allowed only outside production,
+ * and production refuses to boot with it.
+ */
+function resolveCorsOrigin(option?: string | string[] | true): string | string[] | true {
+  if (option !== undefined) return option;
+
+  const raw = process.env.CORS_ORIGIN ?? process.env.ALLOWED_ORIGIN;
+  if (raw) {
+    const list = raw
+      .split(',')
+      .map((value) => value.trim())
+      .filter(Boolean);
+    if (list.includes('*')) return '*';
+    if (list.length === 1) return list[0]!;
+    if (list.length > 1) return list;
+  }
+  return config.webUrl();
+}
+
 export interface BuildServerOptions extends CreateStudioDeskOptions {
   desk?: StudioDesk;
   logger?: boolean;
   corsOrigin?: string | string[] | true;
-  /** Shared secret for the mobile app's device token. */
+  /**
+   * Shared secret required on every `/api/*` request.
+   *
+   * With no key configured the server runs fully open - correct for local demo
+   * mode and nothing else. `requireAuth` reports that state through
+   * `/api/health` so a production deploy cannot silently run unauthenticated.
+   */
   apiKey?: string;
+  /** Max requests per IP per window. Set to 0 to disable. */
+  rateLimit?: { max: number; windowMs: number };
 }
 
 declare module 'fastify' {
@@ -91,7 +122,23 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
   // Wire fee assessment + notifications to domain events.
   const billing = connectBilling(desk.ctx);
 
-  const origin = options.corsOrigin ?? config.webUrl();
+  const origin = resolveCorsOrigin(options.corsOrigin);
+  const apiKey = options.apiKey ?? process.env.API_KEY;
+  const isProduction = config.nodeEnv() === 'production';
+
+  // Never accept a credential check against an empty key: that would make an
+  // unset API_KEY behave like `Bearer ''`.
+  const effectiveApiKey = apiKey?.trim() ? apiKey : undefined;
+
+  // Fail fast: an open API in production is a release blocker, not a warning.
+  if (isProduction && !apiKey) {
+    throw new Error(
+      'API_KEY must be set in production. Refusing to start an unauthenticated API.',
+    );
+  }
+  if (isProduction && (origin === true || origin === '*')) {
+    throw new Error('CORS origin must be an explicit allowlist in production, not "*".');
+  }
 
   // Hand-rolled CORS rather than @fastify/cors: it is ~20 lines, removes a
   // plugin whose major versions are pinned to specific Fastify releases, and
@@ -106,15 +153,102 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
           ? requestOrigin
           : allowOrigin[0];
 
+    // `*` and `Access-Control-Allow-Credentials: true` together are rejected by
+    // browsers and signal a misconfiguration, so never emit the pair. In demo
+    // mode the wildcard is fine and credentials are simply not offered.
+    const wildcard = allowed === '*';
     reply.header('Access-Control-Allow-Origin', allowed);
-    if (allowed !== '*') reply.header('Vary', 'Origin');
-    reply.header('Access-Control-Allow-Credentials', 'true');
+    if (!wildcard) {
+      reply.header('Vary', 'Origin');
+      reply.header('Access-Control-Allow-Credentials', 'true');
+    }
     reply.header('Access-Control-Allow-Methods', 'GET,POST,PATCH,PUT,DELETE,OPTIONS');
     reply.header('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Studio-Id');
     reply.header('Access-Control-Max-Age', '86400');
 
     if (request.method === 'OPTIONS') {
       await reply.code(204).send();
+    }
+  });
+
+  // Baseline hardening headers.
+  app.addHook('onRequest', async (_request, reply) => {
+    reply.header('X-Content-Type-Options', 'nosniff');
+    reply.header('X-Frame-Options', 'DENY');
+    reply.header('Referrer-Policy', 'strict-origin-when-cross-origin');
+    reply.header('X-DNS-Prefetch-Control', 'off');
+    reply.header('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+    reply.removeHeader('X-Powered-By');
+  });
+
+  /**
+   * In-memory fixed-window rate limiter.
+   *
+   * Sufficient for a single-instance studio deployment; swap for a shared store
+   * (Redis/Workers KV) when running more than one replica.
+   */
+  const rateLimit = options.rateLimit ?? { max: 300, windowMs: 60_000 };
+  const buckets = new Map<string, { count: number; resetAt: number }>();
+
+  app.addHook('onRequest', async (request, reply) => {
+    if (rateLimit.max <= 0) return;
+    if (!request.url.startsWith('/api/')) return;
+
+    const nowMs = Date.now();
+    const key = request.ip ?? 'unknown';
+    const existing = buckets.get(key);
+    const resetAt = existing && existing.resetAt > nowMs ? existing.resetAt : nowMs + rateLimit.windowMs;
+    const count = existing && existing.resetAt > nowMs ? existing.count + 1 : 1;
+
+    buckets.set(key, { count, resetAt });
+
+    // Always advertise the budget, even on the request that opens the window.
+    reply.header('X-RateLimit-Limit', String(rateLimit.max));
+    reply.header('X-RateLimit-Remaining', String(Math.max(0, rateLimit.max - count)));
+    reply.header('X-RateLimit-Reset', String(Math.ceil(resetAt / 1000)));
+
+    // Opportunistic cleanup so the map cannot grow unbounded.
+    if (buckets.size > 10_000) {
+      for (const [k, v] of buckets) if (v.resetAt <= nowMs) buckets.delete(k);
+    }
+
+    if (count > rateLimit.max) {
+      reply.header('Retry-After', String(Math.ceil((resetAt - nowMs) / 1000)));
+      await reply.code(429).send({
+        error: 'rate_limited',
+        message: 'Too many requests. Slow down.',
+      });
+    }
+  });
+
+  /** Bearer-token gate on every `/api/*` route, plus the public ones. */
+  // Health probes must stay reachable without credentials, or an orchestrator
+  // cannot poll them.
+  const PUBLIC_PATHS = new Set(['/health', '/ready', '/', '/api/health']);
+
+  app.addHook('onRequest', async (request, reply) => {
+    if (!effectiveApiKey) return; // demo mode: open by design
+    if (PUBLIC_PATHS.has(request.url.split('?')[0]!)) return;
+
+    const header = request.headers.authorization ?? '';
+    const supplied = header.startsWith('Bearer ') ? header.slice(7).trim() : '';
+    const provided = typeof request.headers['x-api-key'] === 'string'
+      ? (request.headers['x-api-key'] as string)
+      : '';
+
+    const expected = effectiveApiKey;
+    const matches = (candidate: string): boolean => {
+      // Length is not secret; early-exit on mismatch is fine.
+      if (candidate.length !== expected.length) return false;
+      let diff = 0;
+      for (let i = 0; i < candidate.length; i += 1) {
+        diff |= candidate.charCodeAt(i) ^ expected.charCodeAt(i);
+      }
+      return diff === 0;
+    };
+
+    if (!matches(supplied) && !matches(provided)) {
+      await reply.code(401).send({ error: 'unauthorized', message: 'Missing or invalid API key.' });
     }
   });
 
@@ -162,14 +296,35 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
     status: 'ok',
     service: 'studiodesk-api',
     driver: desk.ctx.repo.kind,
+    /** Liveness: the process is up and the event loop is turning. */
+    live: true,
     integrations: {
       supabase: config.hasHostedBackend(),
       groq: config.hasAi(),
       payments: config.hasPayments(),
       email: Boolean(config.resendApiKey() || config.useSendUrl()),
     },
+    security: {
+      authRequired: Boolean(effectiveApiKey),
+      corsWildcard: origin === true || origin === '*',
+      rateLimit: rateLimit.max > 0 ? `${rateLimit.max}/${rateLimit.windowMs}ms` : 'disabled',
+    },
     uptimeSeconds: Math.round(process.uptime()),
   })));
+
+  /** Readiness: the data layer answers. Use this as the deploy gate. */
+  app.get('/ready', route(async () => {
+    try {
+      await desk.ctx.repo.table('studios').count();
+      return { ready: true, driver: desk.ctx.repo.kind };
+    } catch (error) {
+      return {
+        ready: false,
+        driver: desk.ctx.repo.kind,
+        reason: error instanceof Error ? error.message : 'unknown',
+      };
+    }
+  }));
 
   app.get('/', route(async () => ({
     name: 'StudioDesk API',

@@ -29,3 +29,25 @@ Thumbs.db
 .vscode/
 *.log
 npm-debug.log*
+
+# release-gate scratch output
+audit.txt
+audit.json
+audit2.txt
+inst.txt
+docker-build.log
+seed.json
+r.txt
+dbg*.txt
+full*.txt
+*.pdf
+
+# test/build output
+coverage/
+.nyc_output/
+
+# local debug output
+r.txt
+dbg*.txt
+full*.txt
+*.pdf

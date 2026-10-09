@@ -46,18 +46,24 @@
     "docker:logs": "docker compose logs -f api",
     "docker:seed": "docker compose exec api npm run seed:demo",
     "deploy:worker": "wrangler deploy -f packages/api/wrangler.toml",
-    "deploy:pages": "npm --prefix packages/web run deploy:pages"
+    "deploy:pages": "npm --prefix packages/web run deploy:pages",
+    "scan:secrets": "node scripts/scan-secrets.cjs",
+    "check:deploy": "node scripts/check-deploy-config.cjs",
+    "check:env": "node scripts/check-env-docs.cjs",
+    "release:gate": "npm run verify && npm run scan:secrets:selftest && npm run scan:secrets && npm run check:deploy && npm run check:env && npm run audit:errors && npm run typecheck:all && npm test",
+    "scan:secrets:selftest": "node scripts/scan-secrets.selftest.cjs"
   },
   "devDependencies": {
     "@types/node": "^22.9.0",
     "@types/qrcode": "^1.5.5",
+    "@vitest/coverage-v8": "^2.1.9",
     "tsx": "^4.19.2",
     "typescript": "^5.6.3",
     "vitest": "^2.1.4"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.47.9",
-    "fastify": "^4.28.1",
+    "fastify": "^5.12.5",
     "qrcode": "^1.5.4",
     "zod": "^3.24.1"
   }
