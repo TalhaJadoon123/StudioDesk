@@ -46,8 +46,15 @@ full*.txt
 coverage/
 .nyc_output/
 
-# local debug output
-r.txt
-dbg*.txt
-full*.txt
-*.pdf
+# release-gate artifacts (auto-generated)
+RELEASE-VERDICT.md
+cov.txt
+err-audit.txt
+final-gate*.txt`nfinal-test*.txt
+gate.txt
+test-run*.txt
+ts-*.txt
+vitest-run.txt
+sec-scan.txt
+packages/docs/RELEASE-GATE.md
+scripts/scan-secrets.selftest.cjs
