@@ -1,0 +1,276 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  NODE_VERSION: '20.x'
+
+jobs:
+  # --------------------------------------------------------------
+  # Lint, Typecheck, Test, Security Gates
+  # --------------------------------------------------------------
+  check:
+    name: Check (typecheck + test + gates)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install web dependencies
+        run: npm run setup:web
+
+      - name: Install mobile dependencies
+        run: npm run setup:mobile
+
+      - name: Typecheck (source)
+        run: npm run typecheck
+
+      - name: Typecheck (tests)
+        run: npm run typecheck:tests
+
+      - name: Run tests
+        run: npm test
+
+      - name: Verify node_modules
+        run: npm run verify
+
+      - name: Secret scan (self-test)
+        run: npm run scan:secrets:selftest
+
+      - name: Secret scan
+        run: npm run scan:secrets
+
+      - name: Check deploy config
+        run: npm run check:deploy
+
+      - name: Check env docs
+        run: npm run check:env
+
+      - name: Audit error throws
+        run: npm run audit:errors
+
+  # --------------------------------------------------------------
+  # Build web app (Next.js)
+  # --------------------------------------------------------------
+  build-web:
+    name: Build Web (Next.js)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: check
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install web dependencies
+        run: npm run setup:web
+
+      - name: Build Next.js app
+        run: npm --prefix packages/web run build
+
+  # --------------------------------------------------------------
+  # Build Docker images
+  # --------------------------------------------------------------
+  build-docker:
+    name: Build Docker Images
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: check
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build API image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          target: api
+          tags: studiodesk-api:ci
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build Web image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          target: web
+          tags: studiodesk-web:ci
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # --------------------------------------------------------------
+  # Security Scans (Container, Dependencies, SAST)
+  # --------------------------------------------------------------
+  security:
+    name: Security Scans
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: build-docker
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability scanner (API image)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'studiodesk-api:ci'
+          format: 'sarif'
+          output: 'trivy-api.sarif'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Run Trivy vulnerability scanner (Web image)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'studiodesk-web:ci'
+          format: 'sarif'
+          output: 'trivy-web.sarif'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Upload Trivy results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-api.sarif'
+          category: 'trivy-api'
+
+      - name: Upload Trivy results to GitHub Security (Web)
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-web.sarif'
+          category: 'trivy-web'
+
+      - name: Run npm audit
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Generate SBOM (API)
+        uses: anchore/sbom-action@v0
+        with:
+          image: studiodesk-api:ci
+          output-file: sbom-api.spdx.json
+          format: spdx-json
+
+      - name: Generate SBOM (Web)
+        uses: anchore/sbom-action@v0
+        with:
+          image: studiodesk-web:ci
+          output-file: sbom-web.spdx.json
+          format: spdx-json
+
+      - name: Upload SBOMs
+        uses: actions/upload-artifact@v4
+        with:
+          name: sboms
+          path: sbom-*.spdx.json
+          retention-days: 30
+
+  # --------------------------------------------------------------
+  # CodeQL Analysis
+  # --------------------------------------------------------------
+  codeql:
+    name: CodeQL Analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [typescript]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          queries: +security-and-quality
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"
+
+  # --------------------------------------------------------------
+  # Deploy to Staging (on main branch only)
+  # --------------------------------------------------------------
+  deploy-staging:
+    name: Deploy Staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [build-web, build-docker, security, codeql]
+    if: github.ref == 'refs/heads/main'
+    environment: staging
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Deploy API to Cloudflare Workers (staging)
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: deploy --config packages/api/wrangler.toml --env staging
+
+      - name: Deploy Web to Cloudflare Pages (staging)
+        run: npm --prefix packages/web run deploy:pages
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+  # --------------------------------------------------------------
+  # Release (on tag)
+  # --------------------------------------------------------------
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [build-web, build-docker, security, codeql]
+    if: startsWith(github.ref, 'refs/tags/v')
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Deploy API to Cloudflare Workers (production)
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: deploy --config packages/api/wrangler.toml --env production
+
+      - name: Deploy Web to Cloudflare Pages (production)
+        run: npm --prefix packages/web run deploy:pages
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
