@@ -1,4 +1,5 @@
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
+import pino from 'pino';
 import {
   config,
   toErrorBody,
@@ -113,9 +114,39 @@ function ok<T>(reply: FastifyReply, payload: T, status = 200): FastifyReply {
 }
 
 export async function buildServer(options: BuildServerOptions = {}): Promise<FastifyInstance> {
+  // Create pino logger with pretty printing in development, JSON in production
+  const logger = pino({
+    level: config.nodeEnv() === 'production' ? 'info' : 'debug',
+    transport:
+      config.nodeEnv() !== 'production'
+        ? { target: 'pino-pretty', options: { colorize: true, translateTime: 'SYS:standard' } }
+        : undefined,
+  });
+
   const app = Fastify({
-    logger: options.logger ?? (config.nodeEnv() !== 'test'),
+    logger: false, // We use our own pino logger
     bodyLimit: 1_048_576,
+  });
+
+  // Request ID middleware - generates or propagates request ID for tracing
+  app.addHook('onRequest', async (request, reply) => {
+    const requestId = (request.headers['x-request-id'] as string) ?? crypto.randomUUID();
+    request.id = requestId;
+    reply.header('X-Request-ID', requestId);
+    
+    // Structured log for each request
+    logger.info(
+      { req: { id: requestId, method: request.method, url: request.url, ip: request.ip } },
+      'request started',
+    );
+  });
+
+  // Response logging
+  app.addHook('onResponse', async (request, reply) => {
+    logger.info(
+      { req: { id: request.id, method: request.method, url: request.url }, res: { statusCode: reply.statusCode } },
+      'request completed',
+    );
   });
 
   const desk = options.desk ?? (await createStudioDesk(options));
@@ -178,6 +209,20 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
     reply.header('Referrer-Policy', 'strict-origin-when-cross-origin');
     reply.header('X-DNS-Prefetch-Control', 'off');
     reply.header('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+    // Content-Security-Policy: restrict sources to self + known external APIs.
+    // Adjust `connect-src` if you add more external endpoints.
+    reply.header(
+      'Content-Security-Policy',
+      "default-src 'self'; " +
+        "script-src 'self'; " +
+        "style-src 'self' 'unsafe-inline'; " +
+        "img-src 'self' data:; " +
+        "font-src 'self'; " +
+        "connect-src 'self' https://api.groq.com https://*.supabase.co; " +
+        "frame-ancestors 'none'; " +
+        "base-uri 'self'; " +
+        "form-action 'self'",
+    );
     reply.removeHeader('X-Powered-By');
   });
 
@@ -270,9 +315,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
   });
 
   /**
-   * Wraps a handler so thrown AppErrors become proper status codes. A handler
-   * may send its own reply (status/content-type); `reply.sent` tells us to
-   * leave it alone.
+   * Route wrapper that catches errors and logs them with structured logging.
    */
   const route =
     (handler: (request: FastifyRequest, reply: FastifyReply) => Promise<unknown>): Handler =>
@@ -283,7 +326,9 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
         return reply.code(200).send(result);
       } catch (error) {
         const { statusCode, body } = toErrorBody(error);
-        if (statusCode >= 500) app.log.error({ err: error }, 'handler failed');
+        if (statusCode >= 500) {
+          logger.error({ err: error, reqId: request.id, path: request.url }, 'handler failed');
+        }
         return reply.code(statusCode).send(body);
       }
     };

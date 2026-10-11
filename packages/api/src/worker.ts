@@ -271,6 +271,18 @@ export default {
       'X-Frame-Options': 'DENY',
       'Referrer-Policy': 'strict-origin-when-cross-origin',
       'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
+      // Content-Security-Policy: restrict sources to self + known external APIs.
+      // Adjust `connect-src` if you add more external endpoints.
+      'Content-Security-Policy':
+        "default-src 'self'; " +
+        "script-src 'self'; " +
+        "style-src 'self' 'unsafe-inline'; " +
+        "img-src 'self' data:; " +
+        "font-src 'self'; " +
+        "connect-src 'self' https://api.groq.com https://*.supabase.co; " +
+        "frame-ancestors 'none'; " +
+        "base-uri 'self'; " +
+        "form-action 'self'",
     };
     if (allowOrigin !== '*') corsHeaders['Access-Control-Allow-Credentials'] = 'true';
 

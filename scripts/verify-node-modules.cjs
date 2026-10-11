@@ -51,7 +51,11 @@ function entryPoints(manifest) {
     };
     walkExports(manifest.exports);
   }
-  return out.filter(Boolean).map((entry) => entry.replace(/^\.\//, ''));
+  // Filter out type-only exports (no JS entry point)
+  return out
+    .filter(Boolean)
+    .map((entry) => entry.replace(/^\.\//, ''))
+    .filter((entry) => !entry.endsWith('.d.ts') && !entry.endsWith('.d.cts'));
 }
 
 const broken = [];
