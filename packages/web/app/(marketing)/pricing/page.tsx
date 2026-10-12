@@ -81,14 +81,14 @@ export default function PricingPage() {
                     ? 'Free forever, no card required'
                     : `${formatMoney(selected.yearlyPriceCents)} billed yearly (2 months free)`}
                 </p>
-                <p className="muted tiny">{plan.tagline}</p>
+                <p className="muted tiny">{selected.tagline}</p>
                 <div className="mt-4">
                   <Link
                     href={tier === 'free' ? '/dashboard' : `/dashboard?plan=${tier}`}
-                    className={`btn ${plan.highlighted ? 'btn-primary' : ''}`}
+                    className={`btn ${selected.highlighted ? 'btn-primary' : ''}`}
                     style={{ width: '100%' }}
                   >
-                    {tier === 'free' ? 'Start free' : `Choose ${plan.name}`}
+                    {tier === 'free' ? 'Start free' : `Choose ${selected.name}`}
                   </Link>
                 </div>
               </div>

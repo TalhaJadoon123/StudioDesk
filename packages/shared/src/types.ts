@@ -62,6 +62,8 @@ export interface MemberWithUsage extends Member {
   tenureDays: number;
   churnRisk: number;
   churnBand: ChurnBand;
+  /** Number of unused class-pack credits (0 if on membership). */
+  packCredits: number;
 }
 
 export type ChurnBand = 'low' | 'medium' | 'high' | 'at-risk';
@@ -414,7 +416,7 @@ export type DunningAction =
 
 export interface DunningPolicy {
   /** Days after the charge date before each action fires. */
-  retryAfterDays: number[];
+  retryAfterDays: readonly number[];
   emailReceipt: boolean;
   pauseAfterDays: number;
   cancelAfterDays: number;

@@ -1,0 +1,57 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "moduleDetection": "force",
+    "jsx": "react-jsx",
+    "allowJs": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "forceConsistentCasingInFileNames": true,
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "types": ["node"],
+    "baseUrl": ".",
+    "paths": {
+      "@studiodesk/shared": ["packages/shared/src/index.ts"],
+      "@studiodesk/shared/*": ["packages/shared/src/*"],
+      "@studiodesk/core": ["packages/core/src/index.ts"],
+      "@studiodesk/core/*": ["packages/core/src/*"],
+      "@studiodesk/core/test": ["packages/core/test/index.ts"],
+      "@studiodesk/core/test/*": ["packages/core/test/*"],
+      "@studiodesk/booking": ["packages/booking/src/index.ts"],
+      "@studiodesk/booking/*": ["packages/booking/src/*"],
+      "@studiodesk/billing": ["packages/billing/src/index.ts"],
+      "@studiodesk/billing/*": ["packages/billing/src/*"],
+      "@studiodesk/checkin": ["packages/checkin/src/index.ts"],
+      "@studiodesk/checkin/*": ["packages/checkin/src/*"],
+      "@studiodesk/api": ["packages/api/src/index.ts"]
+    }
+  },
+  "//": "Source only. Tests are typechecked by tsconfig.test.json, which relaxes index-access strictness for fixture lookups.",
+  "include": [
+    "packages/shared/src/**/*.ts",
+    "packages/core/src/**/*.ts",
+    "packages/booking/src/**/*.ts",
+    "packages/billing/src/**/*.ts",
+    "packages/checkin/src/**/*.ts",
+    "packages/api/src/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "**/.next/**",
+    "**/dist/**",
+    "packages/mobile/**",
+    "packages/docs/**",
+    "packages/web/app/**",
+    "packages/web/lib/**"
+  ]
+}

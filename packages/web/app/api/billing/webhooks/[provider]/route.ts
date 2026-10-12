@@ -49,7 +49,7 @@ export async function POST(
         const valid = await verifyStripeSignature(raw, signature, secret);
         if (!valid) return NextResponse.json({ error: 'invalid_signature' }, { status: 401 });
 
-        const { data } = (payload.data ?? {}) as { object?: Record<string, unknown> };
+        const data = (payload.data ?? {}) as Record<string, unknown> | undefined;
         const outcome = handleStripeWebhook({
           handled: true,
           type: String(payload.type ?? ''),

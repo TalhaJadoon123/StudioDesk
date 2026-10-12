@@ -2,7 +2,7 @@
   "name": "@studiodesk/web",
   "version": "1.0.0",
   "private": true,
-  "//": "Standalone install (not a root workspace) so the root install stays fast. Run `npm run setup:web` from the repo root.",
+  "//": "Email goes through fetch against Resend/useSend (no SDK) - see packages/billing/src/email.ts. Auth.js is optional: add next-auth when you want login, see DEPLOY.md section 3.",
   "scripts": {
     "dev": "next dev -p 3000",
     "build": "next build",
@@ -12,15 +12,15 @@
     "deploy:pages": "next build && wrangler pages deploy .next --project-name studiodesk"
   },
   "dependencies": {
+    "@next/swc-win32-x64-msvc": "^16.4.0",
+    "@pdfme/common": "^6.2.4",
+    "@pdfme/generator": "^4.5.2",
+    "@pdfme/schemas": "^4.5.2",
     "next": "^14.2.18",
     "qrcode": "^1.5.4",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
-  },
-  "//": "Email goes through fetch against Resend/useSend (no SDK) - see packages/billing/src/email.ts. Auth.js is optional: add next-auth when you want login, see DEPLOY.md section 3.",
-  "optionalDependencies": {
-    "@pdfme/generator": "^4.5.1",
-    "@pdfme/schemas": "^4.5.1"
+    "react-dom": "^18.3.1",
+    "studiodesk": "file:../.."
   },
   "peerDependencies": {
     "next-auth": "^4.24.10"

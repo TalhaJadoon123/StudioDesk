@@ -48,7 +48,7 @@ export async function getDunningPolicy(ctx: CoreContext): Promise<DunningPolicy>
   const settings = await getStudioSettings(ctx);
   const policy: DunningPolicy = {
     retryAfterDays:
-      (settings.dunningRetryAfterDays as number[] | undefined) ?? DEFAULT_DUNNING_POLICY.retryAfterDays,
+      (settings.dunningRetryAfterDays as readonly number[] | undefined) ?? DEFAULT_DUNNING_POLICY.retryAfterDays,
     emailReceipt: DEFAULT_DUNNING_POLICY.emailReceipt,
     pauseAfterDays: (settings.dunningPauseAfterDays as number) ?? DEFAULT_DUNNING_POLICY.pauseAfterDays,
     cancelAfterDays: (settings.dunningCancelAfterDays as number) ?? DEFAULT_DUNNING_POLICY.cancelAfterDays,

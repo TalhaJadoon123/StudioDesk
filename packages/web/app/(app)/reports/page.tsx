@@ -13,7 +13,7 @@ export default async function ReportsPage({
 }) {
   const desk = getDesk();
   const days = Math.min(365, Math.max(7, Number(searchParams.days ?? 30) || 30));
-  const tab = searchParams.tab === 'churn' ? 'churn' : 'attendance';
+  const tab = (searchParams.tab === 'churn' ? 'churn' : searchParams.tab === 'revenue' ? 'revenue' : 'attendance') as 'attendance' | 'churn' | 'revenue';
 
   const studio = await desk.studio.getStudio(desk.ctx);
   const [revenue, attendance] = await Promise.all([

@@ -12,16 +12,18 @@ import { createStudioDesk, type StudioDesk } from '@studiodesk/core';
 
 const GLOBAL_KEY = Symbol.for('studiodesk.web.desk');
 
-type GlobalWithDesk = typeof globalThis & { [GLOBAL_KEY]?: StudioDesk };
+type GlobalWithDesk = typeof globalThis & { [GLOBAL_KEY]?: Promise<StudioDesk> };
 
-export function desk(): StudioDesk {
-  const globalRef = globalThis as GlobalWithDesk;
-  if (!globalRef[GLOBAL_KEY]) {
-    globalRef[GLOBAL_KEY] = createStudioDesk();
+let deskPromise: Promise<StudioDesk> | null = null;
+
+export async function desk(): Promise<StudioDesk> {
+  if (!deskPromise) {
+    deskPromise = createStudioDesk();
   }
-  return globalRef[GLOBAL_KEY]!;
+  return deskPromise;
 }
 
-export function driverName(): string {
-  return desk().ctx.repo.kind;
+export async function driverName(): Promise<string> {
+  const d = await desk();
+  return d.ctx.repo.kind;
 }
