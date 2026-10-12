@@ -1,0 +1,47 @@
+# Semgrep configuration for StudioDesk
+# This file configures Semgrep for the project
+
+# Enable metrics (required for --config auto)
+metrics: on
+
+# Exclude patterns for common directories
+exclude:
+  - "**/node_modules/**"
+  - "**/.next/**"
+  - "**/coverage/**"
+  - "**/dist/**"
+  - "**/build/**"
+  - "**/*.d.ts"
+  - "**/test/**"
+  - "**/*.test.ts"
+  - "**/*.test.tsx"
+  - "**/*.spec.ts"
+  - "**/*.spec.tsx"
+  - "**/scripts/**"
+  - "**/logs/**"
+  - "**/*.log"
+
+# Custom rules directory
+rules:
+  - .semgrep/rules/security.yaml
+
+# Timeout for scanning individual files (seconds)
+timeout: 30
+
+# Maximum memory usage (MiB)
+max-memory: 4096
+
+# Number of cores to use (0 = auto)
+jobs: 0
+
+# Output format
+json: true
+
+# Fail on ERROR severity
+error: true
+
+# Report WARNING severity
+warn: true
+
+# Ignore INFO severity
+ignore-info: true

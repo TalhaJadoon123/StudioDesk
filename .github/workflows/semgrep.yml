@@ -1,0 +1,141 @@
+# GitHub Actions workflow for Semgrep scanning
+name: Semgrep Security Scan
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Run weekly on Mondays at 3 AM UTC
+    - cron: '0 3 * * 1'
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  semgrep:
+    name: Semgrep Security Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        # Run with both the security-audit config and custom rules
+        config:
+          - 'p/security-audit'
+          - '.semgrep/rules/security.yaml'
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Run Semgrep scan
+        id: semgrep
+        uses: returntocorp/semgrep-action@v1
+        with:
+          config: ${{ matrix.config }}
+          # Only scan source files, not node_modules, .next, coverage, etc.
+          args: >-
+            --exclude=**/node_modules/**
+            --exclude=**/.next/**
+            --exclude=**/coverage/**
+            --exclude=**/dist/**
+            --exclude=**/build/**
+            --exclude=**/*.d.ts
+            --exclude=**/test/**
+            --exclude=**/*.test.ts
+            --exclude=**/*.test.tsx
+            --metrics=off
+            --json
+            --output=semgrep-results.json
+          generateSarif: true
+      
+      - name: Upload SARIF to GitHub Security
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: semgrep-results.sarif
+          category: semgrep/${{ matrix.config }}
+      
+      - name: Upload Semgrep results as artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: semgrep-results-${{ matrix.config }}
+          path: semgrep-results.json
+          retention-days: 30
+      
+      - name: Comment PR with results
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const results = JSON.parse(fs.readFileSync('semgrep-results.json', 'utf8'));
+            const findings = results.results || [];
+            
+            if (findings.length === 0) {
+              await github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: '✅ **Semgrep Scan Complete** - No security issues found!'
+              });
+              return;
+            }
+            
+            const errorFindings = findings.filter(f => f.extra.severity === 'ERROR');
+            const warningFindings = findings.filter(f => f.extra.severity === 'WARNING');
+            const infoFindings = findings.filter(f => f.extra.severity === 'INFO');
+            
+            let body = '## 🔍 Semgrep Security Scan Results\n\n';
+            body += `| Severity | Count |\n|----------|-------|\n`;
+            body += `| 🔴 ERROR | ${errorFindings.length} |\n`;
+            body += `| 🟡 WARNING | ${warningFindings.length} |\n`;
+            body += `| 🔵 INFO | ${infoFindings.length} |\n`;
+            body += `| **Total** | **${findings.length}** |\n\n`;
+            
+            if (errorFindings.length > 0) {
+              body += '### 🔴 Critical Issues\n\n';
+              body += '| File | Line | Rule | Message |\n';
+              body += '|------|------|------|---------|\n';
+              for (const f of errorFindings.slice(0, 20)) {
+                const file = f.path.replace(process.cwd() + '/', '');
+                body += `| \`${file}\` | ${f.start.line} | ${f.check_id} | ${f.extra.message} |\n`;
+              }
+              body += '\n';
+            }
+            
+            if (warningFindings.length > 0) {
+              body += '### 🟡 Warnings\n\n';
+              body += '| File | Line | Rule | Message |\n';
+              body += '|------|------|------|---------|\n';
+              for (const f of warningFindings.slice(0, 20)) {
+                const file = f.path.replace(process.cwd() + '/', '');
+                body += `| \`${file}\` | ${f.start.line} | ${f.check_id} | ${f.extra.message} |\n`;
+              }
+              body += '\n';
+            }
+            
+            body += '---\n*View full results in the [Actions tab](${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})*';
+            
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });

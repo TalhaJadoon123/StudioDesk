@@ -1,0 +1,82 @@
+# Pre-commit hooks for StudioDesk
+# Install with: pip install pre-commit && pre-commit install
+
+repos:
+  - repo: local
+    hooks:
+      - id: semgrep
+        name: Semgrep Security Scan
+        entry: semgrep scan --config .semgrep.yml --error
+        language: system
+        types: [typescript, javascript, tsx]
+        exclude: |
+          (?x)^(
+            node_modules/|
+            \.next/|
+            coverage/|
+            dist/|
+            build/|
+            \.d\.ts$|
+            test/|
+            \.test\.ts$|
+            \.test\.tsx$|
+            \.spec\.ts$|
+            \.spec\.tsx$|
+            scripts/|
+            logs/|
+            \.log$
+          )
+        stages: [commit]
+        pass_filenames: true
+        verbose: true
+        always_run: false
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: \.md$
+      - id: end-of-file-fixer
+        exclude: \.md$
+      - id: check-yaml
+      - id: check-json
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: check-added-large-files
+        args: ['--maxkb=1000']
+      - id: detect-private-key
+
+  - repo: https://github.com/pre-commit/mirrors-prettier
+    rev: v3.0.0
+    hooks:
+      - id: prettier
+        types_or: [javascript, typescript, tsx, json, yaml, markdown]
+        exclude: |
+          (?x)^(
+            node_modules/|
+            \.next/|
+            coverage/|
+            dist/|
+            build/|
+            \.d\.ts$
+          )
+
+  - repo: https://github.com/pre-commit/mirrors-eslint
+    rev: v8.57.0
+    hooks:
+      - id: eslint
+        types: [typescript, javascript, tsx]
+        exclude: |
+          (?x)^(
+            node_modules/|
+            \.next/|
+            coverage/|
+            dist/|
+            build/|
+            \.d\.ts$
+          )
+        additional_dependencies:
+          - eslint@8.57.0
+          - @typescript-eslint/parser@7.0.0
+          - @typescript-eslint/eslint-plugin@7.0.0
+          - eslint-plugin-import@2.29.1
