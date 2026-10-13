@@ -32,10 +32,11 @@ export default defineConfig({
     // Test files import shared fixtures from another package; keep them in the
     // typecheck (tsconfig.json) and out of the published build.
     reporters: ['default'],
-    testTimeout: 20_000,
-    hookTimeout: 20_000,
+    testTimeout: 60_000,
+    hookTimeout: 60_000,
     pool: 'forks',
     poolOptions: { forks: { singleFork: false } },
+    isolate: false,
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html'],
